@@ -9,7 +9,7 @@
 # from keepalived.
 ################################################################################
 
-FROM mrbobbytables/ubuntu-base:1.0.0
+FROM mrbobbytables/ubuntu-base:1.0.2
 
 MAINTAINER Bob Killen / killen.bob@gmail.com / @mrbobbytables
 
