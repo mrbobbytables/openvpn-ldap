@@ -1,6 +1,6 @@
 ################################################################################
-# openvpn:1.0.0
-# Date: 9/27/2015
+# openvpn:1.1.0
+# Date: 12/16/2015
 # OpenVPN Version: 2.3.2-7ubuntu3.1
 # Keepalived Version: 1:1.2.7-1ubuntu1
 #
@@ -9,7 +9,7 @@
 # from keepalived.
 ################################################################################
 
-FROM mrbobbytables/ubuntu-base:1.0.0
+FROM mrbobbytables/ubuntu-base:1.0.2
 
 MAINTAINER Bob Killen / killen.bob@gmail.com / @mrbobbytables
 

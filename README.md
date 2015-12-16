@@ -7,7 +7,7 @@ With services such as OpenVPN where a container needs to modify the host configu
 
 ##### Version Information:
 
-* **Container Release:** 1.0.0
+* **Container Release:** 1.1.0
 * **OpenVPN:** 2.3.2-7ubuntu3.1
 * **Keepalived:** 1:1.2.7-1ubuntu1
 
@@ -17,6 +17,7 @@ With services such as OpenVPN where a container needs to modify the host configu
 * **[Libpam-LDAPD (nslcd)](#nslcd)** - A daemon that provides LDAP lookup and authentication for PAM.
 * **[Rsyslog](#rsyslog)** - The system logging daemon. Bundled to support logging for Keepalived.
 * **[Keepalived](#keepalived)** - A well known and frequently used framework that provides load-balancing and fault tolerance via VRRP (Virtual Router Redundancy Protocol).
+* **[Logrotate](#logrotate)** - A script and application that aid in pruning log files.
 * **[Logstash-Forwarder](#logstash-forwarder)** - A lightweight log collector and shipper for use with [Logstash](https://www.elastic.co/products/logstash).
 * **[Redpill](#redpill)** - A bash script and healthcheck for supervisord managed services. It is capable of running cleanup scripts that should be executed upon container termination.
 
@@ -38,6 +39,7 @@ With services such as OpenVPN where a container needs to modify the host configu
  * [Nslcd](#nslcd)
  * [Rsyslog](#rsyslog)
  * [Keepalived](#keepalived)
+ * [Logrotate](#logrotate)
  * [Logstash-Forwarder](#logstash-forwarder)
  * [Redpill](#redpill)
 * [Troubleshooting](#troubleshooting)
@@ -65,7 +67,7 @@ The host(s) that this is intended to run on must have a few kernel settings conf
 
 ##### LDAP Preparation
 `/etc/nslcd.conf`
-Nslcd needs to be configured with the proper LDAP settings for your environment. After configuration, the file must have permissions set to `640`. This is done automatically in the Dockerfile, but if the configuration is being mounted from a host or other container, this will have to be done manually. 
+Nslcd needs to be configured with the proper LDAP settings for your environment. After configuration, the file must have permissions set to `640`. This is done automatically in the Dockerfile, but if the configuration is being mounted from a host or other container, this will have to be done manually.
 
 An example tailored for Active Directory is included below, for more general configuration information, please see [Arthur DeJong's documentation](http://arthurdejong.org/nss-pam-ldapd/nslcd.conf.5).
 
@@ -141,7 +143,7 @@ For further configuration parameters, please see either the [OpenVPN](#openvpn) 
 ### Example Run Command
 
 **Master**
-```
+```bash
 docker run -d --net=host --cap-add NET_ADMIN \
 -e ENVIRONMENT=production \
 -e PARENT_HOST=$(hostname) \
@@ -163,10 +165,10 @@ openvpn-ldap
 ```
 
 **Backup**
-```
+```bash
 docker run -d --net=host --cap-add NET_ADMIN \
 -e ENVIRONMENT=production \
--e PARENT_HOST="$(hostname)" \
+-e PARENT_HOST=$(hostname) \
 -e OVPN_LOCAL=172.16.1.20 \
 -e OVPN_PUSH_1="route 10.10.0.0 255.255.255.0" \
 -e OVPN_PUSH_2="dhcp-option DNS 10.10.0.111" \
@@ -189,7 +191,7 @@ openvpn-ldap
 ### Example Marathon App Definition
 
 **Master**
-```
+```json
 {
     "id": "/ovpn/master",
     "instances": 1,
@@ -241,7 +243,7 @@ openvpn-ldap
 ```
 
 **Backup**
-```
+```json
 {
     "id": "/ovpn/backup",
     "instances": 1,
@@ -340,12 +342,15 @@ In practice, the supplied Logstash-Forwarder config should be used as an example
 | `SERVICE_KEEPALIVED`              |                                          |
 | `SERVICE_KEEPALIVED_CONF`         | `/etc/keepalived/keepalived.conf`        |
 | `KEEPALIVED_AUTOCONF`             | `enabled`                                |
+| `SERVICE_LOGROTATE`               |                                          |
+| `SERVICE_LOGROTATE_INTERVAL`      | `3600` (set in script by default)        |
 | `SERVICE_LOGSTASH_FORWARDER`      |                                          |
 | `SERVICE_LOGSTASH_FORWARDER_CONF` | `/opt/logstash-forwarer/ovpn.conf`       |
 | `SERVICE_NSLCD`                   | `enabled`                                |
 | `SERVICE_REDPILL`                 |                                          |
 | `SERVICE_REDPILL_MONITOR`         | `ovpn,nslcd,keepalived`                  |
 | `SERVICE_REDPILL_CLEANUP`         | `$IPTB_DELETE`                           |
+| `SERVICE_RSYSLOG`                 | `enabled`                                |
 
 #### Description
 
@@ -373,6 +378,10 @@ In practice, the supplied Logstash-Forwarder config should be used as an example
 
 * `KEEPALIVED_AUTOCONF` - Enables or disables Keepalived autoconfiguration. (**Options:** `enabled` or `disabled`)
 
+* `SERVICE_LOGROTATE` - Enables or disabled the Logrotate service. This will be set automatically depending on the environment. (**Options:** `enabled` or `disabled`)
+
+* `SERVICE_LOGROTATE_INTERVAL` - The time in seconds between runs of logrotate or the logrotate script. The default (3600 or 1 hour) is set by default in the logrotate script automatically.
+
 * `SERVICE_LOGSTASH_FORWARDER` - Enables or disables the Logstash-Forwarder service. Set automatically depending on the `ENVIRONMENT`. See the Environment section below.  (**Options:** `enabled` or `disabled`)
 
 * `SERVICE_LOGSTASH_FORWARDER_CONF` - The path to the logstash-forwarder configuration.
@@ -385,6 +394,8 @@ In practice, the supplied Logstash-Forwarder config should be used as an example
 
 * `SERVICE_REDPILL_CLEANUP` - The path to the script that will be executed upon container termination. For OpenVPN this should clear any iptables rules from the host.
 
+* `SERVICE_RSYSLOG` - Enables of disables the rsyslog service. This is `enabled` by default and should not be disabled unless manually mananging logging.
+
 ---
 
 
@@ -392,32 +403,35 @@ In practice, the supplied Logstash-Forwarder config should be used as an example
 
 * `local` (default)
 
-| Variable                     | Default  |
-|------------------------------|----------|
-| `SERVICE_KEEPALIVED`         | disabled |
-| `SERVICE_LOGSTASH_FORWARDER` | disabled |
-| `SERVICE_REDPILL`            | enabled  |
+| **Variable**                 | **Default** |
+|------------------------------|-------------|
+| `SERVICE_KEEPALIVED`         | `disabled`  |
+| `SERVICE_LOGROTATE`          | `enabled`   |
+| `SERVICE_LOGSTASH_FORWARDER` | `disabled`  |
+| `SERVICE_REDPILL`            | `enabled`   |
 
 
 * `prod`|`production`|`dev`|`development`
 
-| Variable                     | Default |
-|------------------------------|---------|
-| `SERVICE_KEEPALIVED`         | enabled |
-| `SERVICE_LOGSTASH_FORWARDER` | enabled |
-| `SERVICE_REDPILL`            | enabled |
+| **Variable**                 | **Default** |
+|------------------------------|-------------|
+| `SERVICE_KEEPALIVED`         | `enabled`   |
+| `SERVICE_LOGROTATE`          | `enabled`   |
+| `SERVICE_LOGSTASH_FORWARDER` | `enabled`   |
+| `SERVICE_REDPILL`            | `enabled`   |
 
 
 * `debug`
 
-| Variable                     | Default                                                     |
+| **Variable**                 | **Default**                                                 |
 |------------------------------|-------------------------------------------------------------|
-| `SERVICE_KEEPALIVED`         | enabled                                                     |
-| `SERVICE_LOGSTASH_FORWARDER` | disabled                                                    |
-| `SERVICE_REDPILL`            | enabled                                                     |
+| `SERVICE_KEEPALIVED`         | `enabled`                                                   |
+| `SERVICE_LOGROTATE`          | `disabled`                                                  |
+| `SERVICE_LOGSTASH_FORWARDER` | `disabled`                                                  |
+| `SERVICE_REDPILL`            | `enabled`                                                   |
 | `SERVICE_KEEPALIVED_CMD`     | `/usr/sbin/keepalived -n -D -l -f $SERVICE_KEEPALIVED_CONF` |
 | `SERVICE_NSLCD_CMD`          | `/usr/sbin/nslcd -d`                                        |
-| `OVPN_VERB`                  | 11                                                          |
+| `OVPN_VERB`                  | `11`                                                        |
 
 ---
 ---
@@ -443,7 +457,6 @@ If `OVPN_AUTOCONF` is set to enabled (default). The other variables will become 
 | `OVPN_DH`          | `/etc/openvpn/certs/dh2048.pem`     |
 | `OVPN_CIPHER`      | `BF-CBC`                            |
 | `OVPN_VERB`        | `1`                                 |
-| `OVPN_LOG_APPEND`  | `/var/log/openvpn/ovpn.log`         |
 | `OVPN_LOCAL`       |                                     |
 | `OVPN_PORT`        | `1194`                              |
 | `OVPN_PROTO`       | `udp`                               |
@@ -471,8 +484,6 @@ If `OVPN_AUTOCONF` is set to enabled (default). The other variables will become 
 * `OVPN_CIPHER` - The cipher algorithm used by OpenVPN. To get a list of available cipher's execute the following command substituting the name of your container for the default `docker run --rm=true openvpn-ldap openvpn --show-ciphers`.
 
 * `OVPN_VERB` - The logging verbosity. Should be a value between 1-11.
-
-* `OVPN_LOG_APPEND` - The path to the log file.
 
 * `OVPN_LOCAL` - The IP Address that OpenVPN should bind to. (**Required**)
 
@@ -519,6 +530,7 @@ client-cert-not-required
 plugin /usr/lib/openvpn/openvpn-plugin-auth-pam.so ovpn
 user nobody
 group nogroup
+syslog openvpn
 mode server
 ca /etc/openvpn/certs/ca.crt
 cert /etc/openvpn/certs/server.crt
@@ -556,7 +568,7 @@ verb 1
 ```
 
 ##### Example Auto Generated iptables Creation Script
-```
+```bash
 #!/bin/bash
 # Autocreated iptables creation script.
 iptables -A INPUT -i eth1 -d 172.16.1.20 -p udp --dport 1194 -m conntrack --ctstate NEW -j ACCEPT
@@ -567,7 +579,7 @@ iptables -A POSTROUTING -t nat -o eth0 -s 10.10.0.0/24 -d 192.168.253.0/24 -j MA
 iptables -A OUTPUT -o tun+ -j ACCEPT
 ```
 ##### Example Auto Generated iptables Deletion Script
-```
+```bash
 #!/bin/bash
 # Autocreated iptables deletion script.
 iptables -D INPUT -i eth1 -d 172.16.1.20 -p udp --dport 1194 -m conntrack --ctstate NEW -j ACCEPT
@@ -767,6 +779,64 @@ vrrp_instance MAIN {
 
 ```
 
+
+---
+
+
+
+
+### Logrotate
+
+The logrotate script is a small simple script that will either call and execute logrotate on a given interval; or execute a supplied script. This is useful for applications that do not perform their own log cleanup.
+
+#### Logrotate Environment Variables
+
+##### Defaults
+
+| **Variable**                 | **Default**                           |
+|------------------------------|---------------------------------------|
+| `SERVICE_LOGROTATE`          |                                       |
+| `SERVICE_LOGROTATE_INTERVAL` | `3600` (set in script)                |
+| `SERVICE_LOGROTATE_CONFIG`   | `/etc/logrotate.conf` (set in script) |
+| `SERVICE_LOGROTATE_SCRIPT`   |                                       |
+| `SERVICE_LOGROTATE_FORCE`    |                                       |
+| `SERVICE_LOGROTATE_VERBOSE`  |                                       |
+| `SERVICE_LOGROTATE_DEBUG`    |                                       |
+| `SERVICE_LOGROTATE_CMD`      | `/opt/script/logrotate.sh <flags>`    |
+
+##### Description
+
+* `SERVICE_LOGROTATE` - Enables or disables the Logrotate service. Set automatically depending on the `ENVIRONMENT`. See the Environment section.  (**Options:** `enabled` or `disabled`)
+
+* `SERVICE_LOGROTATE_INTERVAL` - The time in seconds between run of either the logrotate command or the provided logrotate script. Default is set to `3600` or 1 hour in the script itself.
+
+* `SERVICE_LOGROTATE_CONFIG` - The path to the logrotate config file. If neither config or script is provided, it will default to `/etc/logrotate.conf`.
+
+* `SERVICE_LOGROTATE_SCRIPT` - A script that should be executed on the provided interval. Useful to do cleanup of logs for applications that already handle rotation, or if additional processing is required.
+
+* `SERVICE_LOGROTATE_FORCE` - If present, passes the 'force' command to logrotate. Will be ignored if a script is provided.
+
+* `SERVICE_LOGROTATE_VERBOSE` - If present, passes the 'verbose' command to logrotate. Will be ignored if a script is provided.
+
+* `SERVICE_LOGROTATE_DEBUG` - If present, passed the 'debug' command to logrotate. Will be ignored if a script is provided.
+
+* `SERVICE_LOGROTATE_CMD` - The command that is passed to supervisor. If overriding, must be an escaped python string expression. Please see the [Supervisord Command Documentation](http://supervisord.org/configuration.html#program-x-section-settings) for further information.
+
+
+##### Logrotate Script Help Text
+```
+root@ec58ca7459cb:/opt/scripts# ./logrotate.sh --help
+logrotate.sh - Small wrapper script for logrotate.
+-i | --interval     The interval in seconds that logrotate should run.
+-c | --config       Path to the logrotate config.
+-s | --script       A script to be executed in place of logrotate.
+-f | --force        Forces log rotation.
+-v | --verbose      Display verbose output.
+-d | --debug        Enable debugging, and implies verbose output. No state file changes.
+-h | --help         This usage text.
+```
+
+
 ---
 
 ### Logstash-Forwarder
@@ -820,7 +890,7 @@ Redpill is a small script that performs status checks on services managed throug
 
 * `SERVICE_REDPILL` - Enables or disables the Redpill service. Set automatically depending on the `ENVIRONMENT`. See the Environment section.  (**Options:** `enabled` or `disabled`)
 
-* `SERVICE_REDPILL_MONITOR` - The name of the supervisord service(s) that the Redpill service check script should monitor. 
+* `SERVICE_REDPILL_MONITOR` - The name of the supervisord service(s) that the Redpill service check script should monitor.
 
 * `SERVICE_REDPILL_INTERVAL` - The interval in which Redpill polls supervisor for status checks. (Default for the script is 30 seconds)
 
@@ -846,9 +916,9 @@ Redpill - Supervisor status monitor. Terminates the supervisor process if any sp
 ##### General Issues
 In the event of an issue, the `ENVIRONMENT` variable can be set to `debug` to stop the container from shipping logs and terminating in the event of a fatal error (**Note:** This will also prevent the iptables cleanup script from executing automatically). This will also automatically set the log verbosity to it's max value of `11`. In many cases this may be too high and suggest overriding it, starting it with something smaller. Below is a snippet on logging levels from the [OpenVPN Documentation](https://community.openvpn.net/openvpn/wiki/Openvpn23ManPage).
 ```
-0 -- No output except fatal errors. 
-1 to 4 -- Normal usage range. 
-5 -- Output R and W characters to the console for each packet read and write, uppercase is used for TCP/UDP packets and lowercase is used for TUN/TAP packets. 
+0 -- No output except fatal errors.
+1 to 4 -- Normal usage range.
+5 -- Output R and W characters to the console for each packet read and write, uppercase is used for TCP/UDP packets and lowercase is used for TUN/TAP packets.
 6 to 11 -- Debug info range (see errlevel.h for additional information on debug levels).
 ```
 
