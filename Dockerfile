@@ -86,8 +86,8 @@ RUN DEBIAN_FRONTEND=noninteractive  \
     sgml-data        \
     w3m              \
     xsltproc         \
- && apt-get -y autoremove              \
- && apt-get -y autoclean               \
+ && apt-get -y autoremove  \
+ && apt-get -y autoclean   \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 COPY ./skel  /
