@@ -26,6 +26,7 @@ init_vars() {
   export OVPN_IPTB_DELETE=${OVPN_IPTB_DELETE:-/opt/scripts/delete-iptb-rules.sh}
   export KEEPALIVED_AUTOCONF=${KEEPALIVED_AUTOCONF:-enabled}
 
+  export SERVICE_CONSUL_TEMPLATE=${SERVICE_CONSUL_TEMPLATE:-disabled}
   export SERVICE_NSLCD=${SERVICE_NSLCD:-enabled}
   export SERVICE_RSYSLOG${SERVICE_RSYSLOG:-enabled}
   export SERVICE_KEEPALIVED_CONF=${SERVICE_KEEPALIVED_CONF:-/etc/keepalived/keepalived.conf}
@@ -52,6 +53,9 @@ init_vars() {
       export SERVICE_KEEPALIVED_CMD="/usr/sbin/keepalived -n -D -l -f $SERVICE_KEEPALIVED_CONF"
       export SERVICE_NSLCD_CMD="/usr/sbin/nslcd -d"
       export OVPN_VERB=${OVPN_VERB:-11}
+      if [[ "$SERVICE_CONSUL_TEMPLATE" == "enabled" ]]; then
+        export CONSUL_TEMPLATE_LOG_LEVEL=${CONSUL_TEMPLATE_LOG_LEVEL:-debug}
+      fi
       ;;
     local|*)
       export SERVICE_KEEPALIVED=${SERVICE_KEEPALIVED:-disabled} 
@@ -206,6 +210,7 @@ main() {
   echo "[$(date)[App-Name] $APP_NAME"
   echo "[$(date)][Environment] $ENVIRONMENT"
 
+  __config_service_consul_template
   __config_service_keepalived
   __config_service_logrotate
   __config_service_logstash_forwarder
