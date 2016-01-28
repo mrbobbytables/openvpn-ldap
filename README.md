@@ -15,11 +15,12 @@ With services such as OpenVPN where a container needs to modify the host configu
 ##### Services Include
 * **[OpenVPN](@openvpn)** - Provides network access from the public network side to the Mesos-Network.
 * **[Libpam-LDAPD (nslcd)](#nslcd)** - A daemon that provides LDAP lookup and authentication for PAM.
-* **[Rsyslog](#rsyslog)** - The system logging daemon. Bundled to support logging for Keepalived.
 * **[Keepalived](#keepalived)** - A well known and frequently used framework that provides load-balancing and fault tolerance via VRRP (Virtual Router Redundancy Protocol).
+* **[Consul-Template](#consul-template)** - An application that can populate configs from a consul service.
 * **[Logrotate](#logrotate)** - A script and application that aid in pruning log files.
 * **[Logstash-Forwarder](#logstash-forwarder)** - A lightweight log collector and shipper for use with [Logstash](https://www.elastic.co/products/logstash).
 * **[Redpill](#redpill)** - A bash script and healthcheck for supervisord managed services. It is capable of running cleanup scripts that should be executed upon container termination.
+* **[Rsyslog](#rsyslog)** - The system logging daemon.
 
 
 ---
@@ -37,11 +38,12 @@ With services such as OpenVPN where a container needs to modify the host configu
    * [Enabled Autoconfiguration](#enabled-autoconfiguration)
    * [Disabled Autoconfiguration](#disabled-autoconfiguration)
  * [Nslcd](#nslcd)
- * [Rsyslog](#rsyslog)
  * [Keepalived](#keepalived)
+ * [Consul-Template](#consul-template)
  * [Logrotate](#logrotate)
  * [Logstash-Forwarder](#logstash-forwarder)
  * [Redpill](#redpill)
+ * [Rsyslog](#rsyslog)
 * [Troubleshooting](#troubleshooting)
 
 ---
@@ -294,9 +296,6 @@ openvpn-ldap
 }
 ```
 
-
-* **Note:** The example assumes a v1.6+ version of docker or a v2 version of the docker registry. For information on using an older version or connecting to a v1 registry, please see the [private registry](https://mesosphere.github.io/marathon/docs/native-docker-private-registry.html) section of the Marathon documentation.
-
 ---
 ---
 
@@ -342,6 +341,7 @@ In practice, the supplied Logstash-Forwarder config should be used as an example
 | `SERVICE_KEEPALIVED`              |                                          |
 | `SERVICE_KEEPALIVED_CONF`         | `/etc/keepalived/keepalived.conf`        |
 | `KEEPALIVED_AUTOCONF`             | `enabled`                                |
+| `SERVICE_CONSUL_TEMPLATE`         | `disabled`                               |
 | `SERVICE_LOGROTATE`               |                                          |
 | `SERVICE_LOGROTATE_INTERVAL`      | `3600` (set in script by default)        |
 | `SERVICE_LOGSTASH_FORWARDER`      |                                          |
@@ -362,7 +362,7 @@ In practice, the supplied Logstash-Forwarder config should be used as an example
 
 * `PARENT_HOST` - The name of the parent host. If Logstash-Forwarder is enabled, this will populate the `parent_host` field in the Logstash-Forwarder configuration file.
 
-* `OVPN_AUTOCONF` - Enables or disables OpenVPN autoconfiguration. (**Options:** `enabled` or `disabled`) 
+* `OVPN_AUTOCONF` - Enables or disables OpenVPN autoconfiguration. (**Options:** `enabled` or `disabled`)
 
 * `OVPN_CONF` - The path to the OpenVPN configuration file.
 
@@ -377,6 +377,8 @@ In practice, the supplied Logstash-Forwarder config should be used as an example
 * `SERVICE_KEEPALIVED_CONF` - The path to keepalived config.
 
 * `KEEPALIVED_AUTOCONF` - Enables or disables Keepalived autoconfiguration. (**Options:** `enabled` or `disabled`)
+
+* `SERVICE_CONSUL_TEMPLATE` - Enables or disables the consul-template service. (**Options:** `enabled` or `disabled`)
 
 * `SERVICE_LOGROTATE` - Enables or disabled the Logrotate service. This will be set automatically depending on the environment. (**Options:** `enabled` or `disabled`)
 
@@ -394,7 +396,7 @@ In practice, the supplied Logstash-Forwarder config should be used as an example
 
 * `SERVICE_REDPILL_CLEANUP` - The path to the script that will be executed upon container termination. For OpenVPN this should clear any iptables rules from the host.
 
-* `SERVICE_RSYSLOG` - Enables of disables the rsyslog service. This is `enabled` by default and should not be disabled unless manually mananging logging.
+* `SERVICE_RSYSLOG` - Enables of disables the rsyslog service. This is `enabled` by default and should not be disabled unless manually managing logging.
 
 ---
 
@@ -432,6 +434,9 @@ In practice, the supplied Logstash-Forwarder config should be used as an example
 | `SERVICE_KEEPALIVED_CMD`     | `/usr/sbin/keepalived -n -D -l -f $SERVICE_KEEPALIVED_CONF` |
 | `SERVICE_NSLCD_CMD`          | `/usr/sbin/nslcd -d`                                        |
 | `OVPN_VERB`                  | `11`                                                        |
+| `CONSUL_TEMPLATE_LOG_LEVEL`  | `debug`*                                                    |
+
+\* Only set if `SERVICE_CONSUL_TEMPLATE` is set to `enabled`.
 
 ---
 ---
@@ -630,26 +635,6 @@ The libpam-ldapd simple daemon that provides ldap lookup for local processes. As
 
 *  `SERVICE_NSLCD_CMD` - The command that is passed to supervisor. If overriding, must be an escaped python string expression. Please see the [Supervisord Command Documentation](http://supervisord.org/configuration.html#program-x-section-settings) for further information.
 
----
-
-# Rsyslog
-Rsyslog is a high performance log processing daemon. Keepalived's logging capability is dependant on it being available. Rsyslog will only be enabled when Keepalived is enabled. For any modifications to the config, it is best to edit the rsyslog configs directly (`/etc/rsyslog.conf` and `/etc/rsyslog.d/*`).
-
-##### Defaults
-
-| **Variable**                      | **Default**                                      |
-|-----------------------------------|--------------------------------------------------|
-| `SERVICE_RSYSLOG`                 | `enabled`                                        |
-| `SERVICE_RSYSLOG_CONF`            | `/etc/rsyslog.conf`                              |
-| `SERVICE_RSYSLOG_CMD`             | `/usr/sbin/rsyslogd -n -f $SERVICE_RSYSLOG_CONF` |
-
-##### Description
-
-* `SERVICE_RSYSLOG` - Enables or disables the rsyslog service. This will automatically be set depending on what other services are enabled. (**Options:** `enabled` or `disabled`)
-
-* `SERVICE_RSYSLOG_CONF` - The path to the rsyslog configuration file.
-
-* `SERVICE_RSYSLOG_CMD` -  The command that is passed to supervisor. If overriding, must be an escaped python string expression. Please see the [Supervisord Command Documentation](http://supervisord.org/configuration.html#program-x-section-settings) for further information.
 
 ---
 
@@ -783,6 +768,23 @@ vrrp_instance MAIN {
 ---
 
 
+### Consul-Template
+
+Provides initial configuration of consul-template. Variables prefixed with `CONSUL_TEMPLATE_` will automatically be passed to the consul-template service at runtime, e.g. `CONSUL_TEMPLATE_SSL_CA_CERT=/etc/consul/certs/ca.crt` becomes `-ssl-ca-cert="/etc/consul/certs/ca.crt"`. If managing the application configuration is handled via file configs, no other variables must be passed at runtime.
+
+#### Consul-Template Environment Variables
+
+##### Defaults
+
+| **Variable**                  | **Default**                           |
+|-------------------------------|---------------------------------------|
+| `CONSUL_TEMPLATE_CONFIG`      | `/etc/consul/template/conf.d`         |
+| `CONSUL_TEMPLATE_SYSLOG`      | `true`                                |
+| `SERVICE_CONSUL_TEMPLATE`     |                                       |
+| `SERVICE_CONSUL_TEMPLATE_CMD` | `consul-template <CONSUL_TEMPLATE_*>` |
+
+
+---
 
 
 ### Logrotate
@@ -907,6 +909,29 @@ Redpill - Supervisor status monitor. Terminates the supervisor process if any sp
 -i | --interval   Optional interval at which the service check is performed in seconds. (Default: 30)
 -s | --service    A comma delimited list of the supervisor service names that should be monitored.
 ```
+
+
+---
+
+### Rsyslog
+Rsyslog is a high performance log processing daemon. For any modifications to the config, it is best to edit the rsyslog configs directly (`/etc/rsyslog.conf` and `/etc/rsyslog.d/*`).
+
+##### Defaults
+
+| **Variable**                      | **Default**                                      |
+|-----------------------------------|--------------------------------------------------|
+| `SERVICE_RSYSLOG`                 | `enabled`                                        |
+| `SERVICE_RSYSLOG_CONF`            | `/etc/rsyslog.conf`                              |
+| `SERVICE_RSYSLOG_CMD`             | `/usr/sbin/rsyslogd -n -f $SERVICE_RSYSLOG_CONF` |
+
+##### Description
+
+* `SERVICE_RSYSLOG` - Enables or disables the rsyslog service. This will automatically be set depending on what other services are enabled. (**Options:** `enabled` or `disabled`)
+
+* `SERVICE_RSYSLOG_CONF` - The path to the rsyslog configuration file.
+
+* `SERVICE_RSYSLOG_CMD` -  The command that is passed to supervisor. If overriding, must be an escaped python string expression. Please see the [Supervisord Command Documentation](http://supervisord.org/configuration.html#program-x-section-settings) for further information.
+
 
 ---
 ---
