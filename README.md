@@ -73,6 +73,12 @@ Nslcd needs to be configured with the proper LDAP settings for your environment.
 
 An example tailored for Active Directory is included below, for more general configuration information, please see [Arthur DeJong's documentation](http://arthurdejong.org/nss-pam-ldapd/nslcd.conf.5).
 
+**NOTE:** If you are attaching to active-directory, and the ldap service is running on Server 2012 + with TLS 1.2 enabled; the following line MUST be added to the config:
+
+`tls_ciphers NORMAL:!VERS-TLS1.2`
+
+For more information, see the [troubleshooting](#troubleshooting) section.
+
 ```
 uid nslcd
 gid nslcd
@@ -950,5 +956,11 @@ In the event of an issue, the `ENVIRONMENT` variable can be set to `debug` to st
 ##### Authentication Issues
 For troubleshooting authentication issues, you may wish to leave the `ENVIRONMENT` setting on `prod` or `local`, and set `SERVICE_NSLCD` to `disabled` and launching it manually by executing it via docker exec: `docker exec -it <CONTAINERNAME> /usr/sbin/nslcd -d`. This will allow you to watch the output directly from nslcd as it tries to communicate with your ldap service.
 
+**TLS errors when attempting to authenticate.**
 
+`A TLS packet with unexpected length was received` 
+
+This error will be encountered when attempting to authenticate to an Active Directory based LDAP running on Server 2012 with TLS 1.2 enabled. Gnutls and Microsoft's schannel are **NOT** compatible for ldap negotiation under Ubuntu 14.04. The unfortunate solution is to disabled TLS 1.2 ciphers with the following line added to the nslcd config at `/etc/nslcd.conf`.
+
+`tls_ciphers NORMAL:!VERS-TLS1.2`
 
